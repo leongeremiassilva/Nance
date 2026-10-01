@@ -6,7 +6,7 @@
 :root[data-theme=dark]{--bg:#14181f;--card:#1e242d;--tx:#e8ecf1;--mut:#97a1b0;--bd:#323b47;--okbg:#17352496;--selbg:#1e3a6e;--blbg:#4a2a14;--ok:#4ade80;--sel:#7aa7ff;--bl:#fb923c;--brand:#7f86e6}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 system-ui,-apple-system,Segoe UI,sans-serif}
-main{max-width:900px;margin:0 auto;padding:16px}
+main{max-width:1250px;margin:0 auto;padding:16px}
 h1{font-size:20px;margin:0 0 12px}
 nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
 button,input,select{font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:8px 12px}
@@ -15,7 +15,8 @@ button{cursor:pointer}nav button.on{background:var(--sel);color:#fff;border-colo
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
 table{width:100%;border-collapse:collapse}th,td{padding:8px;text-align:center;border-bottom:1px solid var(--bd)}
 th:first-child,td:first-child{text-align:left}th small{display:block;color:var(--mut);font-weight:400}
-.p{width:64px;height:56px;padding:2px;border-radius:10px;font-size:22px;line-height:1.1}
+.p{width:58px;height:54px;padding:2px;border-radius:10px;font-size:20px;line-height:1.1}.p.on{background:var(--selbg);border-color:var(--sel);border-width:2px}.p.cf{background:var(--blbg);border-color:var(--mut);opacity:.55;cursor:not-allowed}
+.dt th,.dt td{padding:5px 3px}.ph{font-size:12px;white-space:nowrap}.dh{background:rgba(127,127,127,.14)}.dt td:first-child,.dt th:first-child{position:sticky;left:0;background:var(--card);z-index:1;padding-right:10px}
 .p small{display:block;font-size:10px}
 .p.ok{background:var(--okbg);border-color:var(--ok)}.p.sel{background:var(--selbg);border-color:var(--sel);border-width:2px}
 .p.bl{background:var(--blbg);border-color:var(--bl);cursor:not-allowed;opacity:.85}
@@ -45,22 +46,35 @@ const firebaseConfig={apiKey:"AIzaSyAVkS1TbZOFOr5kWENzV--YGARBbbOUwww",authDomai
 firebase.initializeApp(firebaseConfig);
 const auth=firebase.auth(),db=firebase.firestore(),REF=db.doc('app/state');
 let user=null,unsub=null,msg='',ready=false;
-const PER=[{k:'M',n:'Manhã',h:'06–12h',i:'🌅'},{k:'T',n:'Tarde',h:'12–18h',i:'☀️'},{k:'N',n:'Noite',h:'18–00h',i:'🌙'},{k:'D',n:'Madrugada',h:'00–06h',i:'⭐'}];
-const TABS=[['d','Dashboard'],['a','Escalas anteriores'],['f','Funcionários'],['e','Escala / PDF']];
-let S={emps:[],prior:[],sched:[],title:'Escala de Serviço'},tab='d',date=new Date().toISOString().slice(0,10),ad={e:'',d:date};
+const hm=t=>{const [h,m]=t.split(':');return +h*60+ +m},ft=t=>t.endsWith(':00')?t.slice(0,2)+'h':t.replace(':','h');
+const D=['Sexta-feira','Sábado','Domingo'];
+const PER=[['E1','EEsp 1',0,'14:00','18:00'],['E2','EEsp 2',0,'18:00','22:00'],['L1','LC 1',0,'19:00','07:00'],
+['E3','EEsp 3',1,'07:15','11:15'],['E4','EEsp 4',1,'14:00','18:00'],['E5','EEsp 5',1,'18:00','22:00'],['L2','LC 2',1,'07:00','19:00'],['L3','LC 3',1,'19:00','07:00'],
+['E6','EEsp 6',2,'07:15','11:15'],['E7','EEsp 7',2,'14:00','18:00'],['E8','EEsp 8',2,'18:00','22:00'],['L4','LC 4',2,'07:00','19:00'],['L5','LC 5',2,'19:00','07:00']].map(([k,n,d,s,e])=>{const a=d*1440+hm(s);let b=d*1440+hm(e);if(b<=a)b+=1440;return{k,n,d,a,b,h:ft(s)+'–'+ft(e),i:k[0]==='E'?'⏱️':'⏳'}});
+const PM=Object.fromEntries(PER.map(p=>[p.k,p])),ov=(p,q)=>p.a<q.b&&q.a<p.b;
+const TABS=[['d','Dashboard'],['a','Escalas anteriores'],['f','Cadetes'],['e','Escala / PDF']];
+const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const addD=(s,n)=>{const d=new Date(s+'T12:00');d.setDate(d.getDate()+n);return iso(d)};
+const snap=s=>{const w=new Date(s+'T12:00').getDay();return addD(s,w===0?-2:5-w)};
+let S={emps:[],prior:[],sched:[],flags:[],title:'Escala de MCEs'},tab='d',wk=snap(iso(new Date())),ad={e:'',d:wk};
 const save=()=>{REF.set(S).catch(e=>alert('Erro ao salvar: '+e.message))};
 const $=id=>document.getElementById(id),uid=()=>Math.random().toString(36).slice(2,9);
 const nm=id=>(S.emps.find(e=>e.id===id)||{name:'?'}).name;
-const fd=d=>d.split('-').reverse().join('/');
-const wd=d=>new Date(d+'T12:00').toLocaleDateString('pt-BR',{weekday:'long'});
-const blocked=(e,d,p)=>S.prior.some(x=>x.emp===e&&x.date===d&&x.per===p);
-const has=(e,d,p)=>S.sched.some(x=>x.emp===e&&x.date===d&&x.per===p);
-function toggle(e,p){if(blocked(e,date,p))return;
- if(has(e,date,p))S.sched=S.sched.filter(x=>!(x.emp===e&&x.date===date&&x.per===p));else S.sched.push({emp:e,date,per:p});save();render()}
+const fd=d=>d.split('-').reverse().join('/').slice(0,5);
+const pr=()=>S.prior.filter(x=>PM[x.per]),sc=()=>S.sched.filter(x=>PM[x.per]);
+const fl=(e,w)=>(S.flags||[]).find(x=>x.emp===e&&x.date===w),FN={TD:'TD',TR:'Transferido'};
+const st=(e,w,k)=>{const p=PM[k],m=x=>x.emp===e&&x.date===w;
+ if(fl(e,w))return'fl';
+ if(sc().some(x=>m(x)&&x.per===k))return'sel';
+ if(pr().some(x=>m(x)&&ov(p,PM[x.per])))return'bl';
+ if(sc().some(x=>m(x)&&ov(p,PM[x.per])))return'cf';
+ return'ok'};
+function toggle(e,k){const s=st(e,wk,k);if(s!=='ok'&&s!=='sel')return;
+ if(s==='sel')S.sched=S.sched.filter(x=>!(x.emp===e&&x.date===wk&&x.per===k));else S.sched.push({emp:e,date:wk,per:k});save();render()}
 function login(){auth.signInWithEmailAndPassword($('le').value.trim(),$('lp').value).catch(e=>{msg='E-mail ou senha inválidos.';render()})}
 function vl(){return`<div class="card lc"><h2>Login</h2><div class="row" style="margin-top:14px;flex-direction:column;align-items:stretch"><input id="le" type="email" placeholder="E-mail"><input id="lp" type="password" placeholder="Senha" onkeydown="if(event.key==='Enter')login()"><button onclick="login()">Entrar</button><span style="color:#c0392b">${msg}</span></div></div>`}
 auth.onAuthStateChanged(u=>{user=u;ready=true;if(unsub){unsub();unsub=null}
- if(u)unsub=REF.onSnapshot(d=>{if(d.exists&&!d.metadata.hasPendingWrites)S=Object.assign({emps:[],prior:[],sched:[],title:'Escala de Serviço'},d.data());render()},e=>{msg='Sem permissão de acesso.';auth.signOut()});
+ if(u)unsub=REF.onSnapshot(d=>{if(d.exists&&!d.metadata.hasPendingWrites)S=Object.assign({emps:[],prior:[],sched:[],flags:[],title:'Escala de MCEs'},d.data());render()},e=>{msg='Sem permissão de acesso.';auth.signOut()});
  render()});
 function render(){
  document.body.classList.toggle('lg',ready&&!user);
@@ -69,37 +83,49 @@ function render(){
  $('nav').innerHTML=TABS.map(t=>`<button class="${t[0]===tab?'on':''}" onclick="tab='${t[0]}';render()">${t[1]}</button>`).join('')+'<button onclick="auth.signOut()" style="margin-left:auto">Sair</button>';
  $('v').innerHTML=({d:vd,a:va,f:vf,e:ve})[tab]();
 }
+function flag(e,t){const f=fl(e,wk);
+ if(f&&f.t===t)S.flags=S.flags.filter(x=>x!==f);
+ else if(f)return;
+ else{const n=sc().filter(x=>x.emp===e&&x.date===wk).length;
+  if(n&&!confirm(nm(e)+' tem '+n+' período(s) escalado(s) neste fim de semana. Marcar '+FN[t]+' vai removê-los. Continuar?'))return;
+  S.sched=S.sched.filter(x=>!(x.emp===e&&x.date===wk));S.flags=(S.flags||[]).concat([{emp:e,date:wk,t}])}
+ save();render()}
 function vd(){
- if(!S.emps.length)return'<div class="card">Cadastre funcionários na aba <b>Funcionários</b> para começar.</div>';
- const head=PER.map(p=>`<th>${p.n}<small>${p.h}</small></th>`).join('');
- const rows=S.emps.map(e=>`<tr><td><b>${e.name}</b></td>`+PER.map(p=>{
-  const b=blocked(e.id,date,p.k),s=has(e.id,date,p.k);
-  return`<td><button class="p ${b?'bl':s?'sel':'ok'}" ${b?'disabled':''} onclick="toggle('${e.id}','${p.k}')" title="${b?'Indisponível (escala anterior)':s?'Escalado – clique para remover':'Disponível – clique para escalar'}">${b?'🚫':p.i}<small>${b?'Ocupado':s?'Escalado':'Livre'}</small></button></td>`}).join('')+'</tr>').join('');
- return`<div class="card"><div class="row"><label>Data: <input type="date" value="${date}" onchange="date=this.value;render()"></label><span class="mut">${wd(date)}</span></div>
- <table><tr><th>Funcionário</th>${head}</tr>${rows}</table>
- <p class="leg">Verde = disponível · Azul = escalado · Laranja 🚫 = conflito com escala anterior (bloqueado)</p></div>`}
-function addPrior(){const e=$('ae').value,d=$('ad').value;const ps=[...document.querySelectorAll('.cp:checked')].map(c=>c.value);
- if(!e||!d||!ps.length)return alert('Escolha funcionário, data e ao menos um período.');
- ps.forEach(p=>{if(!blocked(e,d,p)){S.prior.push({id:uid(),emp:e,date:d,per:p});S.sched=S.sched.filter(x=>!(x.emp===e&&x.date===d&&x.per===p))}});
- ad={e,d};save();render()}
+ if(!S.emps.length)return'<div class="card">Cadastre os cadetes na aba <b>Cadetes</b> para começar.</div>';
+ const g=D.map((n,i)=>`<th colspan="${PER.filter(p=>p.d===i).length}" class="dh">${n}<small>${fd(addD(wk,i))}</small></th>`).join('')+'<th colspan="2" class="dh">Situação<small>fim de semana inteiro</small></th>';
+ const h=PER.map(p=>`<th class="ph">${p.n}<small>${p.h}</small></th>`).join('')+'<th class="ph">TD<small>Trab. Didático</small></th><th class="ph">Transferido<small>&nbsp;</small></th>';
+ const rows=S.emps.map(e=>{const f=fl(e.id,wk);return`<tr><td><b>${e.name}</b></td>`+PER.map(p=>{const s=st(e.id,wk,p.k);
+  const L={ok:['Livre',p.i,'Disponível – clique para escalar'],sel:['Escalado',p.i,'Escalado – clique para remover'],bl:['Ocupado','🚫','Indisponível (escala anterior)'],cf:['Conflito','⚠️','Conflita com outro período escalado'],fl:[f&&f.t==='TD'?'TD':'Transf.','🚫',f?'Bloqueado: '+FN[f.t]+' neste fim de semana':'']}[s];
+  return`<td><button class="p ${s==='fl'?'bl':s}" ${s==='ok'||s==='sel'?'':'disabled'} onclick="toggle('${e.id}','${p.k}')" title="${L[2]}">${L[1]}<small>${L[0]}</small></button></td>`}).join('')
+  +['TD','TR'].map(t=>{const on=f&&f.t===t;return`<td><button class="p ${on?'on':''}" ${f&&!on?'disabled':''} onclick="flag('${e.id}','${t}')" title="${on?'Clique para remover':'Bloqueia o fim de semana inteiro'}">${t==='TD'?'📚':'🔄'}<small>${on?'Marcado':'Marcar'}</small></button></td>`}).join('')+'</tr>'}).join('');
+ return`<div class="card"><div class="row"><label>Fim de semana (sexta-feira): <input type="date" value="${wk}" onchange="if(this.value){wk=snap(this.value);render()}"></label><span class="mut">${fd(wk)} a ${fd(addD(wk,2))}</span></div>
+ <table class="dt"><tr><th rowspan="2">Cadete</th>${g}</tr><tr>${h}</tr>${rows}</table>
+ <p class="leg">Verde = disponível · Azul = escalado · 🚫 = ocupado por escala anterior · ⚠️ = conflito de horário · TD (Trabalho Didático) e Transferido bloqueiam o cadete no fim de semana inteiro · EEsp = Escala Especial · LC = Licença Cassada</p></div>`}
+function addPrior(){const e=$('ae').value,w=$('ad').value&&snap($('ad').value);const ks=[...document.querySelectorAll('.cp:checked')].map(c=>c.value);
+ if(!e||!w||!ks.length)return alert('Escolha o cadete, o fim de semana e ao menos um período.');
+ ks.forEach(k=>{if(!pr().some(x=>x.emp===e&&x.date===w&&x.per===k))S.prior.push({id:uid(),emp:e,date:w,per:k});
+  S.sched=S.sched.filter(x=>!(x.emp===e&&x.date===w&&PM[x.per]&&ov(PM[x.per],PM[k])))});
+ ad={e,d:w};save();render()}
 function va(){
- const L=[...S.prior].sort((a,b)=>a.date.localeCompare(b.date)).map(x=>{const p=PER.find(q=>q.k===x.per);return`<tr><td>${nm(x.emp)}</td><td>${fd(x.date)}</td><td>${p.i} ${p.n}</td><td><button class="x" onclick="S.prior=S.prior.filter(y=>y.id!=='${x.id}');save();render()">✕</button></td></tr>`}).join('');
+ const L=pr().sort((a,b)=>a.date.localeCompare(b.date)||PM[a.per].a-PM[b.per].a).map(x=>{const p=PM[x.per];return`<tr><td>${nm(x.emp)}</td><td>${D[p.d]} ${fd(addD(x.date,p.d))}</td><td>${p.i} ${p.n} <span class="mut">(${p.h})</span></td><td><button class="x" onclick="S.prior=S.prior.filter(y=>y.id!=='${x.id}');save();render()">✕</button></td></tr>`}).join('');
  return`<div class="card"><b>Lançar escala anterior</b> <span class="mut">(períodos já comprometidos)</span><div class="row" style="margin-top:8px">
- <select id="ae"><option value="">Funcionário…</option>${S.emps.map(e=>`<option value="${e.id}" ${e.id===ad.e?'selected':''}>${e.name}</option>`).join('')}</select>
- <input type="date" id="ad" value="${ad.d}">
- ${PER.map(p=>`<label><input type="checkbox" class="cp" value="${p.k}"> ${p.i} ${p.n}</label>`).join('')}
- <button onclick="addPrior()">Adicionar</button></div></div>
- <div class="card"><table><tr><th>Funcionário</th><th>Data</th><th>Período</th><th></th></tr>${L||'<tr><td colspan=4 class="mut">Nenhuma escala anterior lançada.</td></tr>'}</table></div>`}
+ <select id="ae"><option value="">Cadete…</option>${S.emps.map(e=>`<option value="${e.id}" ${e.id===ad.e?'selected':''}>${e.name}</option>`).join('')}</select>
+ <label>Fim de semana (sexta-feira): <input type="date" id="ad" value="${ad.d}"></label></div>
+ ${D.map((n,i)=>`<div class="row"><b style="min-width:90px">${n}</b>${PER.filter(p=>p.d===i).map(p=>`<label><input type="checkbox" class="cp" value="${p.k}"> ${p.i} ${p.n} <span class="mut">${p.h}</span></label>`).join('')}</div>`).join('')}
+ <button onclick="addPrior()">Adicionar</button></div>
+ <div class="card"><table><tr><th>Cadete</th><th>Dia</th><th>Período</th><th></th></tr>${L||'<tr><td colspan=4 class="mut">Nenhuma escala anterior lançada.</td></tr>'}</table></div>`}
 function addEmp(){const v=$('en').value.trim();if(!v)return;S.emps.push({id:uid(),name:v});save();render()}
-function delEmp(id){if(!confirm('Remover funcionário e suas escalas?'))return;S.emps=S.emps.filter(e=>e.id!==id);S.prior=S.prior.filter(x=>x.emp!==id);S.sched=S.sched.filter(x=>x.emp!==id);save();render()}
-function vf(){return`<div class="card"><div class="row"><input id="en" placeholder="Nome do funcionário" onkeydown="if(event.key==='Enter')addEmp()"><button onclick="addEmp()">Adicionar</button></div>
- <table>${S.emps.map(e=>`<tr><td>${e.name}</td><td style="text-align:right"><button class="x" onclick="delEmp('${e.id}')">Remover</button></td></tr>`).join('')||'<tr><td class="mut">Nenhum funcionário.</td></tr>'}</table></div>`}
+function delEmp(id){if(!confirm('Remover o cadete e suas escalas?'))return;S.emps=S.emps.filter(e=>e.id!==id);S.prior=S.prior.filter(x=>x.emp!==id);S.sched=S.sched.filter(x=>x.emp!==id);S.flags=(S.flags||[]).filter(x=>x.emp!==id);save();render()}
+function vf(){return`<div class="card"><div class="row"><input id="en" placeholder="Nome do cadete" onkeydown="if(event.key==='Enter')addEmp()"><button onclick="addEmp()">Adicionar</button></div>
+ <table>${S.emps.map(e=>`<tr><td>${e.name}</td><td style="text-align:right"><button class="x" onclick="delEmp('${e.id}')">Remover</button></td></tr>`).join('')||'<tr><td class="mut">Nenhum cadete.</td></tr>'}</table></div>`}
 function sheet(){
- const ds=[...new Set(S.sched.map(x=>x.date))].sort();
- if(!ds.length)return'<p class="mut">Nenhum funcionário escalado ainda.</p>';
- return ds.map(d=>`<table class="pt"><tr><th colspan="3">${wd(d)}, ${fd(d)}</th></tr>`+PER.map(p=>{
-  const n=S.sched.filter(x=>x.date===d&&x.per===p.k).map(x=>nm(x.emp)).sort().join(', ');
-  return n?`<tr><td style="width:90px">${p.i} ${p.n}</td><td style="width:80px">${p.h}</td><td>${n}</td></tr>`:''}).join('')+'</table>').join('')}
+ const l=sc(),f=S.flags||[],ws=[...new Set([...l.map(x=>x.date),...f.map(x=>x.date)])].sort();
+ if(!ws.length)return'<p class="mut">Nenhum cadete escalado ainda.</p>';
+ return ws.map(w=>D.map((n,i)=>{const r=PER.filter(p=>p.d===i).map(p=>{const t=l.filter(x=>x.date===w&&x.per===p.k).map(x=>nm(x.emp)).sort().join(', ');
+  return t?`<tr><td style="width:90px">${p.i} ${p.n}</td><td style="width:120px">${p.h}</td><td>${t}</td></tr>`:''}).join('');
+  return r?`<table class="pt"><tr><th colspan="3">${n}, ${fd(addD(w,i))}</th></tr>${r}</table>`:''}).join('')
+  +(()=>{const r=['TD','TR'].map(t=>{const n=f.filter(x=>x.date===w&&x.t===t).map(x=>nm(x.emp)).sort().join(', ');return n?`<tr><td style="width:130px">${t==='TD'?'📚 TD':'🔄 Transferido'}</td><td>${n}</td></tr>`:''}).join('');
+   return r?`<table class="pt"><tr><th colspan="2">Situação – fim de semana ${fd(w)} a ${fd(addD(w,2))}</th></tr>${r}</table>`:''})()).join('')+'<p style="font-size:12px">EEsp: Escala Especial · LC: Licença Cassada · TD: Trabalho Didático</p>'}
 function ve(){return`<div class="card"><div class="row"><input id="tt" value="${S.title}" style="flex:1" oninput="S.title=this.value;save()"><button onclick="printIt()">🖨️ Gerar PDF</button></div>
  <p class="leg">Abre a janela de impressão: escolha “Salvar como PDF”.</p>${sheet()}</div>`}
 function printIt(){$('pr').innerHTML=`<h2 style="margin:0 0 4px">${S.title}</h2><p style="margin:0 0 14px">Emitido em ${new Date().toLocaleDateString('pt-BR')}</p>${sheet()}`;window.print()}
