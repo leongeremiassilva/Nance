@@ -1,0 +1,97 @@
+<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Controle de Escalas</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#f6f7f9;--card:#fff;--tx:#1b2430;--mut:#6b7686;--bd:#dfe3e9;--ok:#1f9d55;--okbg:#e3f6ea;--sel:#2563eb;--selbg:#dbe7ff;--bl:#c2410c;--blbg:#fdebdc}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#14181f;--card:#1e242d;--tx:#e8ecf1;--mut:#97a1b0;--bd:#323b47;--okbg:#17352496;--selbg:#1e3a6e;--blbg:#4a2a14;--ok:#4ade80;--sel:#7aa7ff;--bl:#fb923c}}
+:root[data-theme=dark]{--bg:#14181f;--card:#1e242d;--tx:#e8ecf1;--mut:#97a1b0;--bd:#323b47;--okbg:#17352496;--selbg:#1e3a6e;--blbg:#4a2a14;--ok:#4ade80;--sel:#7aa7ff;--bl:#fb923c}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:900px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:0 0 12px}
+nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+button,input,select{font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:8px 12px}
+button{cursor:pointer}nav button.on{background:var(--sel);color:#fff;border-color:var(--sel)}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:14px;overflow-x:auto}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+table{width:100%;border-collapse:collapse}th,td{padding:8px;text-align:center;border-bottom:1px solid var(--bd)}
+th:first-child,td:first-child{text-align:left}th small{display:block;color:var(--mut);font-weight:400}
+.p{width:64px;height:56px;padding:2px;border-radius:10px;font-size:22px;line-height:1.1}
+.p small{display:block;font-size:10px}
+.p.ok{background:var(--okbg);border-color:var(--ok)}.p.sel{background:var(--selbg);border-color:var(--sel);border-width:2px}
+.p.bl{background:var(--blbg);border-color:var(--bl);cursor:not-allowed;opacity:.85}
+.leg{color:var(--mut);font-size:13px}.x{color:#c0392b;border:0;background:none;padding:2px 8px}
+.mut{color:var(--mut)}#pr{display:none}
+@media print{body *{visibility:hidden}#pr,#pr *{visibility:visible}#pr{display:block;position:absolute;left:0;top:0;width:100%;color:#000}main{padding:0}}
+.pt{width:100%;margin-bottom:14px}.pt td,.pt th{border:1px solid #888;text-align:left}
+</style></head><body><main>
+<h1>📋 Controle de Disponibilidade e Escalas</h1>
+<nav id="nav"></nav><div id="v"></div><div id="pr"></div>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-app-compat.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-auth-compat.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-firestore-compat.min.js"></script>
+<script>
+// ===== COLE AQUI A CONFIGURAÇÃO DO SEU PROJETO FIREBASE =====
+const firebaseConfig={apiKey:"AIzaSyAVkS1TbZOFOr5kWENzV--YGARBbbOUwww",authDomain:"projeto-nance.firebaseapp.com",projectId:"projeto-nance",appId:"1:628007610451:web:8d8217d5e6555dc1e03ea6"};
+// ============================================================
+firebase.initializeApp(firebaseConfig);
+const auth=firebase.auth(),db=firebase.firestore(),REF=db.doc('app/state');
+let user=null,unsub=null,msg='';
+const PER=[{k:'M',n:'Manhã',h:'06–12h',i:'🌅'},{k:'T',n:'Tarde',h:'12–18h',i:'☀️'},{k:'N',n:'Noite',h:'18–00h',i:'🌙'},{k:'D',n:'Madrugada',h:'00–06h',i:'⭐'}];
+const TABS=[['d','Dashboard'],['a','Escalas anteriores'],['f','Funcionários'],['e','Escala / PDF']];
+let S={emps:[],prior:[],sched:[],title:'Escala de Serviço'},tab='d',date=new Date().toISOString().slice(0,10),ad={e:'',d:date};
+const save=()=>{REF.set(S).catch(e=>alert('Erro ao salvar: '+e.message))};
+const $=id=>document.getElementById(id),uid=()=>Math.random().toString(36).slice(2,9);
+const nm=id=>(S.emps.find(e=>e.id===id)||{name:'?'}).name;
+const fd=d=>d.split('-').reverse().join('/');
+const wd=d=>new Date(d+'T12:00').toLocaleDateString('pt-BR',{weekday:'long'});
+const blocked=(e,d,p)=>S.prior.some(x=>x.emp===e&&x.date===d&&x.per===p);
+const has=(e,d,p)=>S.sched.some(x=>x.emp===e&&x.date===d&&x.per===p);
+function toggle(e,p){if(blocked(e,date,p))return;
+ if(has(e,date,p))S.sched=S.sched.filter(x=>!(x.emp===e&&x.date===date&&x.per===p));else S.sched.push({emp:e,date,per:p});save();render()}
+function login(){auth.signInWithEmailAndPassword($('le').value.trim(),$('lp').value).catch(e=>{msg='E-mail ou senha inválidos.';render()})}
+function vl(){return`<div class="card" style="max-width:340px;margin:40px auto"><b>Acesso restrito a administradores</b><div class="row" style="margin-top:10px;flex-direction:column;align-items:stretch"><input id="le" type="email" placeholder="E-mail"><input id="lp" type="password" placeholder="Senha" onkeydown="if(event.key==='Enter')login()"><button onclick="login()">Entrar</button><span style="color:#c0392b">${msg}</span></div></div>`}
+auth.onAuthStateChanged(u=>{user=u;if(unsub){unsub();unsub=null}
+ if(u)unsub=REF.onSnapshot(d=>{if(d.exists&&!d.metadata.hasPendingWrites)S=Object.assign({emps:[],prior:[],sched:[],title:'Escala de Serviço'},d.data());render()},e=>{msg='Sem permissão de acesso.';auth.signOut()});
+ render()});
+function render(){
+ if(!user){$('nav').innerHTML='';$('v').innerHTML=vl();return}
+ $('nav').innerHTML=TABS.map(t=>`<button class="${t[0]===tab?'on':''}" onclick="tab='${t[0]}';render()">${t[1]}</button>`).join('')+'<button onclick="auth.signOut()" style="margin-left:auto">Sair</button>';
+ $('v').innerHTML=({d:vd,a:va,f:vf,e:ve})[tab]();
+}
+function vd(){
+ if(!S.emps.length)return'<div class="card">Cadastre funcionários na aba <b>Funcionários</b> para começar.</div>';
+ const head=PER.map(p=>`<th>${p.n}<small>${p.h}</small></th>`).join('');
+ const rows=S.emps.map(e=>`<tr><td><b>${e.name}</b></td>`+PER.map(p=>{
+  const b=blocked(e.id,date,p.k),s=has(e.id,date,p.k);
+  return`<td><button class="p ${b?'bl':s?'sel':'ok'}" ${b?'disabled':''} onclick="toggle('${e.id}','${p.k}')" title="${b?'Indisponível (escala anterior)':s?'Escalado – clique para remover':'Disponível – clique para escalar'}">${b?'🚫':p.i}<small>${b?'Ocupado':s?'Escalado':'Livre'}</small></button></td>`}).join('')+'</tr>').join('');
+ return`<div class="card"><div class="row"><label>Data: <input type="date" value="${date}" onchange="date=this.value;render()"></label><span class="mut">${wd(date)}</span></div>
+ <table><tr><th>Funcionário</th>${head}</tr>${rows}</table>
+ <p class="leg">Verde = disponível · Azul = escalado · Laranja 🚫 = conflito com escala anterior (bloqueado)</p></div>`}
+function addPrior(){const e=$('ae').value,d=$('ad').value;const ps=[...document.querySelectorAll('.cp:checked')].map(c=>c.value);
+ if(!e||!d||!ps.length)return alert('Escolha funcionário, data e ao menos um período.');
+ ps.forEach(p=>{if(!blocked(e,d,p)){S.prior.push({id:uid(),emp:e,date:d,per:p});S.sched=S.sched.filter(x=>!(x.emp===e&&x.date===d&&x.per===p))}});
+ ad={e,d};save();render()}
+function va(){
+ const L=[...S.prior].sort((a,b)=>a.date.localeCompare(b.date)).map(x=>{const p=PER.find(q=>q.k===x.per);return`<tr><td>${nm(x.emp)}</td><td>${fd(x.date)}</td><td>${p.i} ${p.n}</td><td><button class="x" onclick="S.prior=S.prior.filter(y=>y.id!=='${x.id}');save();render()">✕</button></td></tr>`}).join('');
+ return`<div class="card"><b>Lançar escala anterior</b> <span class="mut">(períodos já comprometidos)</span><div class="row" style="margin-top:8px">
+ <select id="ae"><option value="">Funcionário…</option>${S.emps.map(e=>`<option value="${e.id}" ${e.id===ad.e?'selected':''}>${e.name}</option>`).join('')}</select>
+ <input type="date" id="ad" value="${ad.d}">
+ ${PER.map(p=>`<label><input type="checkbox" class="cp" value="${p.k}"> ${p.i} ${p.n}</label>`).join('')}
+ <button onclick="addPrior()">Adicionar</button></div></div>
+ <div class="card"><table><tr><th>Funcionário</th><th>Data</th><th>Período</th><th></th></tr>${L||'<tr><td colspan=4 class="mut">Nenhuma escala anterior lançada.</td></tr>'}</table></div>`}
+function addEmp(){const v=$('en').value.trim();if(!v)return;S.emps.push({id:uid(),name:v});save();render()}
+function delEmp(id){if(!confirm('Remover funcionário e suas escalas?'))return;S.emps=S.emps.filter(e=>e.id!==id);S.prior=S.prior.filter(x=>x.emp!==id);S.sched=S.sched.filter(x=>x.emp!==id);save();render()}
+function vf(){return`<div class="card"><div class="row"><input id="en" placeholder="Nome do funcionário" onkeydown="if(event.key==='Enter')addEmp()"><button onclick="addEmp()">Adicionar</button></div>
+ <table>${S.emps.map(e=>`<tr><td>${e.name}</td><td style="text-align:right"><button class="x" onclick="delEmp('${e.id}')">Remover</button></td></tr>`).join('')||'<tr><td class="mut">Nenhum funcionário.</td></tr>'}</table></div>`}
+function sheet(){
+ const ds=[...new Set(S.sched.map(x=>x.date))].sort();
+ if(!ds.length)return'<p class="mut">Nenhum funcionário escalado ainda.</p>';
+ return ds.map(d=>`<table class="pt"><tr><th colspan="3">${wd(d)}, ${fd(d)}</th></tr>`+PER.map(p=>{
+  const n=S.sched.filter(x=>x.date===d&&x.per===p.k).map(x=>nm(x.emp)).sort().join(', ');
+  return n?`<tr><td style="width:90px">${p.i} ${p.n}</td><td style="width:80px">${p.h}</td><td>${n}</td></tr>`:''}).join('')+'</table>').join('')}
+function ve(){return`<div class="card"><div class="row"><input id="tt" value="${S.title}" style="flex:1" oninput="S.title=this.value;save()"><button onclick="printIt()">🖨️ Gerar PDF</button></div>
+ <p class="leg">Abre a janela de impressão: escolha “Salvar como PDF”.</p>${sheet()}</div>`}
+function printIt(){$('pr').innerHTML=`<h2 style="margin:0 0 4px">${S.title}</h2><p style="margin:0 0 14px">Emitido em ${new Date().toLocaleDateString('pt-BR')}</p>${sheet()}`;window.print()}
+render();
+</script></body></html>
